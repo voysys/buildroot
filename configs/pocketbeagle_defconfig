@@ -1,0 +1,4 @@
+BR2_arm=y
+BR2_cortex_a8=y
+BR2_ARM_FPU_VFPV3=y
+BR2_GLOBAL_PATCH_DIR="board/pocketbeagle/patches/"
