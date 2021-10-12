@@ -19,7 +19,7 @@ start() {
     mkdir strings/0x409
     echo "1" >strings/0x409/serialnumber
     echo "PocketBeagle" >strings/0x409/manufacturer
-    echo "PocketBeagle Network" >strings/0x409/product
+    echo "Remote NDIS Compatible Device" >strings/0x409/product
 
     mkdir -p configs/c.1/strings/0x409
     echo "Config 1: RNDIS network" >configs/c.1/strings/0x409/configuration
