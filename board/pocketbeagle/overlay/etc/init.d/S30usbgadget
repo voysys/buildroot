@@ -3,34 +3,53 @@
 set -e
 
 GADGET_DIR=/sys/kernel/config/usb_gadget/g1
-OLDPWD=$(pwd)
 
 start() {
-    printf "Starting USB gadget: "
+
+    if [ -d ${GADGET_DIR} ]; then
+        stop
+    fi
+
+    echo "Starting USB gadget"
     mount -t configfs none /sys/kernel/config 2>/dev/null || true
 
     mkdir ${GADGET_DIR}
-    cd ${GADGET_DIR}
 
-    echo 0x1d6b >idVendor  # Linux Foundation
-    echo 0x0104 >idProduct # Multifunction Composite Gadget
-    echo 0x0100 >bcdDevice # v1.0.0
-    echo 0x0200 >bcdUSB    # USB2
-    mkdir strings/0x409
-    echo "1" >strings/0x409/serialnumber
-    echo "PocketBeagle" >strings/0x409/manufacturer
-    echo "Remote NDIS Compatible Device" >strings/0x409/product
+    echo "0x1d6b" >${GADGET_DIR}/idVendor  # Linux Foundation
+    echo "0x0104" >${GADGET_DIR}/idProduct # Multifunction Composite Gadget
+    echo "0x0404" >${GADGET_DIR}/bcdDevice # v1.0.0
+    echo "0x0300" >${GADGET_DIR}/bcdUSB    # USB2
 
-    mkdir -p configs/c.1/strings/0x409
-    echo "Config 1: RNDIS network" >configs/c.1/strings/0x409/configuration
-    echo 250 >configs/c.1/MaxPower
+    mkdir ${GADGET_DIR}/strings/0x409
+    echo "1" >${GADGET_DIR}/strings/0x409/serialnumber
+    echo "PocketBeagle" >${GADGET_DIR}/strings/0x409/manufacturer
+    echo "PocketBeagle USB Ethernet" >${GADGET_DIR}/strings/0x409/product
 
-    mkdir functions/rndis.usb0
-    ln -s functions/rndis.usb0 configs/c.1/
+    mkdir -p ${GADGET_DIR}/configs/c.1/strings/0x409
+    echo "RNDIS" >${GADGET_DIR}/configs/c.1/strings/0x409/configuration
+    echo "250" >${GADGET_DIR}/configs/c.1/MaxPower
 
-    ls /sys/class/udc >UDC
+    echo "1" >${GADGET_DIR}/os_desc/use
+    echo "0xCD" >${GADGET_DIR}/os_desc/b_vendor_code
+    echo "MSFT100" >${GADGET_DIR}/os_desc/qw_sign
 
-    cd "${OLDPWD}"
+    mkdir ${GADGET_DIR}/functions/rndis.usb0
+    echo "0xef" >${GADGET_DIR}/functions/rndis.usb0/class
+    echo "0x04" >${GADGET_DIR}/functions/rndis.usb0/subclass
+    echo "0x01" >${GADGET_DIR}/functions/rndis.usb0/protocol
+    echo "RNDIS" >${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/compatible_id
+    echo "5162001" >${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/sub_compatible_id
+    mkdir ${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Icons
+    echo "2" >${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Icons/type
+    echo "%SystemRoot%\\system32\\shell32.dll,-233" >${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Icons/data
+    mkdir ${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Label
+    echo "1" >${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Label/type
+    echo "PocketBeagle USB Ethernet" >${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Label/data
+
+    ln -s ${GADGET_DIR}/functions/rndis.usb0 ${GADGET_DIR}/configs/c.1/
+    ln -s ${GADGET_DIR}/configs/c.1 ${GADGET_DIR}/os_desc
+    ls /sys/class/udc >${GADGET_DIR}/UDC
+
     echo "OK"
 }
 
@@ -39,39 +58,20 @@ stop() {
 
     [ -d ${GADGET_DIR} ] || exit
 
-    cd ${GADGET_DIR}
+    if [ "$(cat ${GADGET_DIR}/UDC)" != "" ]; then
+        echo "" >${GADGET_DIR}/UDC
+    fi
+    rm -f ${GADGET_DIR}/os_desc/c.1
+    rm -f ${GADGET_DIR}/configs/c.1/rndis.usb0
+    [ -d ${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Icons ] && rmdir ${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Icons
+    [ -d ${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Label ] && rmdir ${GADGET_DIR}/functions/rndis.usb0/os_desc/interface.rndis/Label
+    [ -d ${GADGET_DIR}/functions/rndis.usb0 ] && rmdir ${GADGET_DIR}/functions/rndis.usb0
+    [ -d ${GADGET_DIR}/configs/c.1/strings/0x409 ] && rmdir ${GADGET_DIR}/configs/c.1/strings/0x409
+    [ -d ${GADGET_DIR}/configs/c.1 ] && rmdir ${GADGET_DIR}/configs/c.1
+    [ -d ${GADGET_DIR}/strings/0x409 ] && rmdir ${GADGET_DIR}/strings/0x409
 
-    echo "" >UDC
+    rmdir ${GADGET_DIR}
 
-    echo "Removing strings from configurations"
-    for dir in configs/*/strings/*; do
-        [ -d "$dir" ] && rmdir "$dir"
-    done
-
-    echo "Removing functions from configurations"
-    for func in configs/*.*/*.*; do
-        [ -e "$func" ] && rm "$func"
-    done
-
-    echo "Removing configurations"
-    for conf in configs/*; do
-        [ -d "$conf" ] && rmdir "$conf"
-    done
-
-    echo "Removing functions"
-    for func in functions/*.*; do
-        [ -d "$func" ] && rmdir "$func"
-    done
-
-    echo "Removing strings"
-    for str in strings/*; do
-        [ -d "$str" ] && rmdir "$str"
-    done
-
-    cd ..
-    rmdir g1
-
-    cd "${OLDPWD}"
     echo "OK"
 }
 
