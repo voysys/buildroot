@@ -2,33 +2,88 @@
 
 set -e
 
-GADGET_DIR=/config/usb_gadget/g1
+GADGET_DIR=/sys/kernel/config/usb_gadget/g1
 OLDPWD=$(pwd)
 
-printf "Starting USB gadget: "
+start() {
+    printf "Starting USB gadget: "
+    mount -t configfs none /sys/kernel/config 2>/dev/null || true
 
-modprobe cppi41
-modprobe musb-dsps
-modprobe phy-am335x
-modprobe libcomposite
+    mkdir ${GADGET_DIR}
+    cd ${GADGET_DIR}
 
-mkdir -p /config
-mount -t configfs none /config
-mkdir ${GADGET_DIR}
-cd ${GADGET_DIR}
-echo "0x05e8" >idVendor
-echo "0xa4a1" >idProduct
-mkdir strings/0x409
-echo "serialnumber" >strings/0x409/serialnumber
-echo "manufacturer" >strings/0x409/manufacturer
-echo "ECM Gadget" >strings/0x409/product
-mkdir functions/ecm.usb0
-mkdir configs/c.1
-mkdir configs/c.1/strings/0x409
-echo Conf 1 >configs/c.1/strings/0x409/configuration
-echo 120 >configs/c.1/MaxPower
-ln -s functions/ecm.usb0 configs/c.1
-echo musb-hdrc.0 >UDC
-cd ${OLDPWD}
+    echo 0x1d6b >idVendor  # Linux Foundation
+    echo 0x0104 >idProduct # Multifunction Composite Gadget
+    echo 0x0100 >bcdDevice # v1.0.0
+    echo 0x0200 >bcdUSB    # USB2
+    mkdir strings/0x409
+    echo "1" >strings/0x409/serialnumber
+    echo "PocketBeagle" >strings/0x409/manufacturer
+    echo "PocketBeagle Network" >strings/0x409/product
 
-echo "OK"
+    mkdir -p configs/c.1/strings/0x409
+    echo "Config 1: RNDIS network" >configs/c.1/strings/0x409/configuration
+    echo 250 >configs/c.1/MaxPower
+
+    mkdir functions/rndis.usb0
+    ln -s functions/rndis.usb0 configs/c.1/
+
+    ls /sys/class/udc >UDC
+
+    cd "${OLDPWD}"
+    echo "OK"
+}
+
+stop() {
+    echo "Stopping USB gadget"
+
+    [ -d ${GADGET_DIR} ] || exit
+
+    cd ${GADGET_DIR}
+
+    echo "" >UDC
+
+    echo "Removing strings from configurations"
+    for dir in configs/*/strings/*; do
+        [ -d "$dir" ] && rmdir "$dir"
+    done
+
+    echo "Removing functions from configurations"
+    for func in configs/*.*/*.*; do
+        [ -e "$func" ] && rm "$func"
+    done
+
+    echo "Removing configurations"
+    for conf in configs/*; do
+        [ -d "$conf" ] && rmdir "$conf"
+    done
+
+    echo "Removing functions"
+    for func in functions/*.*; do
+        [ -d "$func" ] && rmdir "$func"
+    done
+
+    echo "Removing strings"
+    for str in strings/*; do
+        [ -d "$str" ] && rmdir "$str"
+    done
+
+    cd ..
+    rmdir g1
+
+    cd "${OLDPWD}"
+    echo "OK"
+}
+
+case "$1" in
+start | restart | reload)
+    start
+    ;;
+stop)
+    stop
+    ;;
+*)
+    echo "Usage: $0 {start|stop|restart|reload}"
+    exit 1
+    ;;
+esac
